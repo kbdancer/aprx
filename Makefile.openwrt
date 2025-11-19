@@ -1,0 +1,79 @@
+#
+# Copyright (C) 2025 OpenWrt.org
+#
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+#
+
+include $(TOPDIR)/rules.mk
+
+PKG_NAME:=aprx
+PKG_VERSION:=2.9
+PKG_RELEASE:=1
+
+PKG_SOURCE_PROTO:=git
+PKG_SOURCE_URL:=https://github.com/PhirePhly/aprx.git
+PKG_SOURCE_VERSION:=2c84448
+PKG_MIRROR_HASH:=skip
+
+PKG_MAINTAINER:=Your Name <your.email@example.com>
+PKG_LICENSE:=BSD-3-Clause
+PKG_LICENSE_FILES:=LICENSE
+
+PKG_FIXUP:=autoreconf
+PKG_INSTALL:=1
+PKG_BUILD_PARALLEL:=1
+
+include $(INCLUDE_DIR)/package.mk
+
+define Package/aprx
+  SECTION:=net
+  CATEGORY:=Network
+  TITLE:=APRS iGate and Digipeater
+  URL:=https://github.com/PhirePhly/aprx
+  DEPENDS:=+libpthread +librt
+endef
+
+define Package/aprx/description
+  APRX is a multi-talented APRS i-gate/digipeater software.
+  It can act as an APRS receive-only iGate (RX-iGate), 
+  a two-way iGate (TX-iGate), or a digipeater.
+  
+  Features:
+  - Rx-IGate and Tx-IGate functionality
+  - APRS New-N and generic AX.25 node digipeater
+  - Viscous Digipeater functionality
+  - Multiple receiver/modem support (serial ports, USB, TCP)
+  - KISS protocol support (multiple variants)
+  - TNC2 debug style text support
+  - D-STAR data side-channel "D-PRS" support
+  - Built-in erlang-monitor for traffic statistics
+endef
+
+CONFIGURE_ARGS += \
+	--with-embedded \
+	--without-openssl \
+	--with-pthread
+
+TARGET_CFLAGS += -std=gnu99
+
+define Package/aprx/conffiles
+/etc/aprx.conf
+endef
+
+define Package/aprx/install
+	$(INSTALL_DIR) $(1)/usr/sbin
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/sbin/aprx $(1)/usr/sbin/
+	$(INSTALL_BIN) $(PKG_INSTALL_DIR)/usr/sbin/aprx-stat $(1)/usr/sbin/
+	
+	$(INSTALL_DIR) $(1)/etc
+	$(INSTALL_CONF) $(PKG_BUILD_DIR)/aprx.conf $(1)/etc/aprx.conf
+	
+	$(INSTALL_DIR) $(1)/etc/init.d
+	$(INSTALL_BIN) ./files/aprx.init $(1)/etc/init.d/aprx
+	
+	$(INSTALL_DIR) $(1)/var/run
+	$(INSTALL_DIR) $(1)/var/log/aprx
+endef
+
+$(eval $(call BuildPackage,aprx))
