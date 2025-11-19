@@ -1,0 +1,133 @@
+========================================
+  后续操作步骤（需要你手动完成）
+========================================
+
+✅ 我已经完成的工作：
+- 创建了 GitHub Actions 配置文件
+- 创建了 OpenWrt 包定义和编译脚本
+- 编写了完整的中文文档
+- 已提交所有文件到本地 git 仓库
+
+========================================
+📤 第 1 步：推送代码到 GitHub
+========================================
+
+在你的终端执行：
+
+cd /workspace
+
+# 如果还没有关联远程仓库，先添加：
+git remote add origin https://github.com/你的用户名/aprx.git
+
+# 推送到 GitHub
+git push -u origin main
+
+# 如果分支是 master，则用：
+git push -u origin master
+
+========================================
+🚀 第 2 步：启用 GitHub Actions
+========================================
+
+1. 打开浏览器，访问你的仓库：
+   https://github.com/你的用户名/aprx
+
+2. 点击顶部的 "Actions" 标签
+
+3. 如果看到提示，点击：
+   "I understand my workflows, go ahead and enable them"
+
+========================================
+▶️ 第 3 步：开始编译
+========================================
+
+方法 A：手动触发（推荐，最快）
+1. 在 Actions 页面
+2. 左侧选择 "Build OpenWrt IPK for MT7621"
+3. 右侧点击 "Run workflow" 下拉按钮
+4. 点击绿色的 "Run workflow" 按钮
+5. 等待 10-20 分钟
+
+方法 B：创建标签触发（会自动创建 Release）
+1. 在你的终端执行：
+   cd /workspace
+   git tag v2.9.0
+   git push origin v2.9.0
+
+2. GitHub Actions 会自动开始编译
+3. 完成后会在 Releases 页面看到编译好的文件
+
+方法 C：推送代码触发
+1. 任何推送到 main/master 分支的提交都会触发编译
+2. 编译产物在 Actions 页面下载
+
+========================================
+📦 第 4 步：下载编译好的 IPK
+========================================
+
+从 Actions 下载：
+1. 点击完成的 workflow（绿色✅）
+2. 滚动到页面底部 "Artifacts" 部分
+3. 下载 zip 文件
+4. 解压得到 IPK 文件
+
+从 Releases 下载（如果用方法B）：
+1. 点击仓库的 "Releases" 标签
+2. 下载最新 release 中的 IPK 文件
+
+========================================
+📥 第 5 步：安装到路由器
+========================================
+
+scp aprx_*.ipk root@你的路由器IP:/tmp/
+ssh root@你的路由器IP
+opkg install /tmp/aprx_*.ipk
+vi /etc/aprx.conf  # 修改配置
+/etc/init.d/aprx start
+/etc/init.d/aprx enable
+
+========================================
+🔧 如果你还没有 GitHub 仓库
+========================================
+
+选项 1：创建新仓库
+1. 访问 https://github.com/new
+2. 仓库名：aprx
+3. 选择 Public
+4. 不要勾选任何初始化选项
+5. 点击 "Create repository"
+6. 按照页面提示推送代码
+
+选项 2：Fork 官方仓库
+1. 访问 https://github.com/PhirePhly/aprx
+2. 点击 "Fork" 按钮
+3. 然后需要合并我创建的文件到 Fork 的仓库
+
+========================================
+💡 快速命令汇总
+========================================
+
+# 推送代码
+cd /workspace
+git push -u origin main
+
+# 创建标签并推送（触发自动编译+Release）
+git tag v2.9.0
+git push origin v2.9.0
+
+# 安装到路由器
+scp aprx_*.ipk root@192.168.1.1:/tmp/
+ssh root@192.168.1.1 "opkg install /tmp/aprx_*.ipk"
+
+========================================
+📞 需要帮助？
+========================================
+
+遇到问题请告诉我：
+- 推送失败？（可能需要配置 SSH key 或 token）
+- Actions 不工作？（检查是否启用）
+- 编译失败？（查看 Actions 日志）
+
+========================================
+
+现在执行：git push -u origin main
