@@ -1,0 +1,191 @@
+name: Build OpenWrt IPK for MT7621
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      openwrt_version:
+        description: 'OpenWrt version'
+        required: false
+        default: '24.10.4'
+
+env:
+  OPENWRT_VERSION: 24.10.4
+  TARGET: ramips
+  SUBTARGET: mt7621
+  ARCH: mipsel_24kc
+
+jobs:
+  build:
+    name: Build APRX IPK
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Free disk space
+      run: |
+        echo "Freeing up disk space..."
+        sudo rm -rf /usr/share/dotnet
+        sudo rm -rf /opt/ghc
+        sudo rm -rf /usr/local/share/boost
+        sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+        df -h
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential ccache ecj fastjar file g++ gawk \
+        gettext git java-propose-classpath libelf-dev libncurses5-dev \
+        libncursesw5-dev libssl-dev python3 unzip wget \
+        python3-setuptools python3-dev rsync subversion swig time \
+        xsltproc zlib1g-dev
+
+    - name: Download OpenWrt SDK
+      run: |
+        SDK_URL="https://downloads.openwrt.org/releases/${OPENWRT_VERSION}/targets/${TARGET}/${SUBTARGET}/openwrt-sdk-${OPENWRT_VERSION}-${TARGET}-${SUBTARGET}_gcc-13.3.0_musl.Linux-x86_64.tar.xz"
+        echo "Downloading SDK from: $SDK_URL"
+        wget -q --show-progress $SDK_URL -O sdk.tar.xz
+        echo "Extracting SDK..."
+        tar -xf sdk.tar.xz
+        mv openwrt-sdk-* openwrt-sdk
+        df -h
+
+    - name: Copy package to SDK
+      run: |
+        cp -r openwrt-package/aprx openwrt-sdk/package/
+        echo "Package copied successfully"
+
+    - name: Update feeds
+      working-directory: openwrt-sdk
+      run: |
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+
+    - name: Configure SDK
+      working-directory: openwrt-sdk
+      run: |
+        echo "CONFIG_PACKAGE_aprx=m" > .config
+        make defconfig
+
+    - name: Build package
+      working-directory: openwrt-sdk
+      run: |
+        echo "Building APRX package..."
+        make package/aprx/compile V=s -j$(nproc) || make package/aprx/compile V=s -j1
+        
+    - name: Collect build artifacts
+      run: |
+        mkdir -p artifacts
+        find openwrt-sdk/bin/packages -name "aprx*.ipk" -exec cp {} artifacts/ \;
+        ls -lh artifacts/
+        
+    - name: Generate checksums
+      working-directory: artifacts
+      run: |
+        sha256sum *.ipk > sha256sums.txt
+        md5sum *.ipk > md5sums.txt
+        cat sha256sums.txt
+
+    - name: Get version info
+      id: version
+      run: |
+        if [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION=$(cat VERSION || echo "2.9")
+          VERSION="${VERSION}-$(date +%Y%m%d)-$(git rev-parse --short HEAD)"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: aprx-openwrt-${{ env.OPENWRT_VERSION }}-${{ env.ARCH }}-${{ steps.version.outputs.version }}
+        path: artifacts/*
+        retention-days: 90
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: artifacts/*
+        body: |
+          ## APRX for OpenWrt ${{ env.OPENWRT_VERSION }} (MT7621)
+          
+          ### 安装方法
+          
+          1. 下载 `aprx_*.ipk` 文件
+          2. 传输到路由器:
+             ```bash
+             scp aprx_*.ipk root@192.168.1.1:/tmp/
+             ```
+          3. SSH 登录路由器并安装:
+             ```bash
+             ssh root@192.168.1.1
+             opkg install /tmp/aprx_*.ipk
+             ```
+          4. 编辑配置文件:
+             ```bash
+             vi /etc/aprx.conf
+             ```
+          5. 启动服务:
+             ```bash
+             /etc/init.d/aprx start
+             /etc/init.d/aprx enable
+             ```
+          
+          ### 版本信息
+          - APRX Version: ${{ steps.version.outputs.version }}
+          - OpenWrt Version: ${{ env.OPENWRT_VERSION }}
+          - Target: ${{ env.TARGET }}/${{ env.SUBTARGET }}
+          - Architecture: ${{ env.ARCH }}
+          - Build Date: ${{ github.event.head_commit.timestamp }}
+          
+          ### 校验和
+          请查看 `sha256sums.txt` 和 `md5sums.txt` 文件
+          
+          ### 文档
+          - [快速开始](https://github.com/${{ github.repository }}/blob/main/openwrt-package/快速开始.md)
+          - [完整文档](https://github.com/${{ github.repository }}/blob/main/openwrt-package/README-zh_CN.md)
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload to workflow summary
+      if: always()
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Build Configuration" >> $GITHUB_STEP_SUMMARY
+        echo "- **OpenWrt Version**: ${{ env.OPENWRT_VERSION }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Target**: ${{ env.TARGET }}/${{ env.SUBTARGET }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Architecture**: ${{ env.ARCH }}" >> $GITHUB_STEP_SUMMARY
+        echo "- **Version**: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        
+        if [ -d artifacts ] && [ "$(ls -A artifacts/*.ipk 2>/dev/null)" ]; then
+          echo "### ✅ Build Successful" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### Generated Files" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          ls -lh artifacts/ >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "#### SHA256 Checksums" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat artifacts/sha256sums.txt >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+        else
+          echo "### ❌ Build Failed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Please check the build logs for errors." >> $GITHUB_STEP_SUMMARY
+        fi
